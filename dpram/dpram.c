@@ -852,11 +852,11 @@ void request_phone_reset(void)
 static int onedram_get_semaphore(const char *func)
 {
 	int i, chk_try = 10;
-	int j, req_try = 5000;
+	int j, req_try = 10000;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
-	mdelay(1);
+	mdelay(4);
 
 	if(dump_on) return -1;
 
@@ -864,7 +864,7 @@ static int onedram_get_semaphore(const char *func)
 		for(i = 0; i < chk_try; i++) {
 			if(*onedram_sem) {
 				unreceived_semaphore = 0;
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
+				//printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
 				return 1;
 			}
 			udelay(1);
@@ -894,11 +894,11 @@ static int onedram_get_semaphore(const char *func)
 static int onedram_get_semaphore_for_init(const char *func)
 {
 	int i, chk_try = 10;
-	int j, req_try = 5000;
+	int j, req_try = 10000;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
-	mdelay(1);
+	mdelay(4);
 
 	if(dump_on) return -1;
 
@@ -906,7 +906,7 @@ static int onedram_get_semaphore_for_init(const char *func)
 		for(i = 0; i < chk_try; i++) {
 			if(*onedram_sem) {
 				unreceived_semaphore = 0;
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
+				//printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
 				return 1;
 			}
 			udelay(1);
