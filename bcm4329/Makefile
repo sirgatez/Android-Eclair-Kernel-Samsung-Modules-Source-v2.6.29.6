@@ -79,14 +79,14 @@ all:
 
 clean: 
 	rm -rf *.o *.ko *.mod.c *~ .*.cmd Module.symvers modules.order .tmp_versions	\
-	 src/dhd/sys/*.o \
-         src/dhd/sys/*.cmd \
-         src/shared/*.o \
-         src/shared/*.cmd \
-         src/bcmsdio/sys/*.o \
-	 src/bcmsdio/sys/*.cmd \
-         src/wl/sys/*.o \
-         src/wl/sys/*.cmd
+	src/dhd/sys/*.o \
+	src/dhd/sys/*.cmd \
+	src/shared/*.o \
+	src/shared/*.cmd \
+	src/bcmsdio/sys/*.o \
+	src/bcmsdio/sys/*.cmd \
+	src/wl/sys/*.o \
+	src/wl/sys/*.cmd
 
 install:
 	@$(MAKE) --no-print-directory -C $(KDIR) \

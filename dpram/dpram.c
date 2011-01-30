@@ -45,10 +45,10 @@
 #define GPIO_LEVEL_HIGH				1
 
 //#define GPIO_AP_RXD				S5PC11X_GPA1(2)
-//#define GPIO_AP_RXD_AF				0x2 // UART_2_RXD
+//#define GPIO_AP_RXD_AF			0x2 // UART_2_RXD
 
 //#define GPIO_AP_TXD				S5PC11X_GPA1(3)
-//#define GPIO_AP_TXD_AF				0x2 // UART_2_TXD
+//#define GPIO_AP_TXD_AF			0x2 // UART_2_TXD
 
 #define GPIO_PHONE_ON				S5PC11X_GPJ1(0)
 #define GPIO_PHONE_ON_AF			0x1
@@ -57,7 +57,7 @@
 #define GPIO_PHONE_RST_N_AF			0x1
 
 //#define GPIO_PDA_ACTIVE			S5PC11X_GPH1(0)//S5PC11X_MP03(3)
-//#define GPIO_PDA_ACTIVE_AF			0x1
+//#define GPIO_PDA_ACTIVE_AF		0x1
 
 #if 0
 #define GPIO_UART_SEL				S5PC11X_MP05(7)	
@@ -65,10 +65,10 @@
 #endif
 
 //#define GPIO_PHONE_ACTIVE			S5PC11X_GPH1(7)
-//#define GPIO_PHONE_ACTIVE_AF			0xff
+//#define GPIO_PHONE_ACTIVE_AF		0xff
 
 #define GPIO_ONEDRAM_INT_N			S5PC11X_GPH1(3)
-#define GPIO_ONEDRAM_INT_N_AF			0xff
+#define GPIO_ONEDRAM_INT_N_AF		0xff
 
 #define IRQ_ONEDRAM_INT_N			IRQ_EINT11
 #define IRQ_PHONE_ACTIVE			IRQ_EINT15
@@ -155,7 +155,7 @@ static struct pdp_info *pdp_table[MAX_PDP_CONTEXT];
 static DEFINE_MUTEX(pdp_lock);
 
 static inline struct pdp_info * pdp_get_dev(u8 id);
-static inline void check_pdp_table(char*, int);
+static inline void check_pdp_table(const char *func, int line);
 static int onedram_get_semaphore_for_init(const char *func);
 
 /*****************************************************************************/
@@ -166,9 +166,11 @@ static int onedram_get_semaphore_for_init(const char *func);
 #define DRIVER_PROC_ENTRY	"driver/dpram"
 #define DRIVER_MAJOR_NUM	252
 
+//#define _DEBUG
+
 #ifdef _DEBUG
 #define _ENABLE_ERROR_DEVICE
-#if 0
+#if 0 //1
 #define PRINT_WRITE
 #define PRINT_READ
 #define PRINT_WRITE_SHORT
@@ -849,43 +851,8 @@ void request_phone_reset(void)
 
 static int onedram_get_semaphore(const char *func)
 {
-	int i, req_try = 100;
-
-	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
-	
-	if(dump_on) return -1;
-
-	if(phone_sync == 0) {
-		return onedram_get_semaphore_for_init(__func__);
-	}
-
-	for(i = 0; i < req_try; i++) {
-		if(*onedram_sem) {
-			unreceived_semaphore = 0;
-			return 1;
-		}
-		if (i == 0)
-			*onedram_mailboxBA = cmd;
-		udelay(40);
-	}
-
-	unreceived_semaphore++;
-	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
-			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
-
-#ifdef _ENABLE_ERROR_DEVICE
-	if(unreceived_semaphore > 10)
-		request_phone_reset();
-#endif
-
-	return 0;
-}
-
-
-static int onedram_get_semaphore_for_init(const char *func)
-{
-	int i, chk_try = 10;
-	int j, req_try = 3;
+	int i, chk_try = 5000;
+	int j, req_try = 10;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	
@@ -895,12 +862,13 @@ static int onedram_get_semaphore_for_init(const char *func)
 		for(i = 0; i < chk_try; i++) {
 			if(*onedram_sem) {
 				unreceived_semaphore = 0;
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
 				return 1;
 			}
-			mdelay(1);
+			udelay(1);
 		}
 		*onedram_mailboxBA = cmd;
-		printk(KERN_ERR "=====> send IRQ: %x\n", cmd);
+		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
@@ -908,8 +876,49 @@ static int onedram_get_semaphore_for_init(const char *func)
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
 #ifdef _ENABLE_ERROR_DEVICE
-	if(unreceived_semaphore > 12)
-		request_phone_reset();
+	if(unreceived_semaphore > 20)
+		unreceived_semaphore = 0;
+		printk(KERN_ERR "[OneDRAM] (@: %s) NOT Resetting phone (I should report this!).\n",  __func__);
+		//printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
+		//request_phone_reset();
+#endif
+
+	return 0;
+}
+
+
+static int onedram_get_semaphore_for_init(const char *func)
+{
+	int i, chk_try = 5000;
+	int j, req_try = 10;
+
+	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
+	
+	if(dump_on) return -1;
+
+	for(j = 0; j < req_try; j++) {
+		for(i = 0; i < chk_try; i++) {
+			if(*onedram_sem) {
+				unreceived_semaphore = 0;
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x %d ]\n",__func__, cmd, j, i);
+				return 1;
+			}
+			udelay(1);
+		}
+		*onedram_mailboxBA = cmd;
+		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
+	}
+
+	unreceived_semaphore++;
+	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
+			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
+
+#ifdef _ENABLE_ERROR_DEVICE
+	if(unreceived_semaphore > 20)
+		unreceived_semaphore = 0;
+		printk(KERN_ERR "[OneDRAM] (@: %s) NOT Resetting phone (I should report this!).\n",  __func__);
+		//printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
+		//request_phone_reset();
 #endif
 
 	return 0;
@@ -1283,6 +1292,7 @@ static int dpram_phone_ramdump_off(void)
 		printk(KERN_ERR "[OneDRAM] Failed to return semaphore. try again\n");
 		*onedram_sem = 0x00;
 	}
+	printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
 	dpram_phone_reset();
 #endif    
 	return 0;
@@ -1513,6 +1523,7 @@ static int dpram_tty_ioctl(struct tty_struct *tty, struct file *file,
 			return copy_to_user((unsigned int *)arg, &val, sizeof(val));
 
 		case DPRAM_PHONE_RESET:
+			printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
 			phone_sync = 0;
 			requested_semaphore = 0;
 			unreceived_semaphore = 0;
@@ -1882,6 +1893,9 @@ static void command_handler(u16 cmd)
 		case INT_MASK_CMD_SMP_REP:
 			cmd_smp_rep_handler();
 			break;
+		case 0xff3f:
+			//Unknown command that randomly appears
+			break;
 
 		default:
 			dprintk(KERN_ERR "Unknown command.. %x\n", cmd);
@@ -2008,7 +2022,7 @@ static irqreturn_t dpram_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-//#define DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ
+#define DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ
 
 #ifdef DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ
 static void phone_active_delayed_work_handler(struct work_struct *ignored);
@@ -2025,8 +2039,10 @@ static void phone_active_delayed_work_handler(struct work_struct *ignored)
 
 	printk("Phone active is still low!!!" );
 	
-	if(phone_sync)
-		request_phone_reset();	
+	if(phone_sync) {
+		printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
+		request_phone_reset();
+	}
 }
 #endif /* DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ */
 
@@ -2059,8 +2075,10 @@ static irqreturn_t phone_active_irq_handler(int irq, void *dev_id)
 	}
 	
 #ifdef _ENABLE_ERROR_DEVICE
-	if((phone_sync) && (!gpio_get_value(GPIO_PHONE_ACTIVE)))
-		request_phone_reset();	
+	if((phone_sync) && (!gpio_get_value(GPIO_PHONE_ACTIVE))) {
+		printk(KERN_ERR "[OneDRAM] (@: %s) Resetting phone.\n",  __func__);
+		request_phone_reset();
+	}
 #endif
 #endif /* DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ */
 
@@ -2440,7 +2458,7 @@ static void vs_del_dev(struct pdp_info *dev)
 	tty_unregister_driver(tty_driver);
 }
 
-static inline void check_pdp_table(char * func, int line)
+static inline void check_pdp_table(const char * func, int line)
 {
 	int slot;
 	for (slot = 0; slot < MAX_PDP_CONTEXT; slot++) {

@@ -218,7 +218,7 @@ dhdcdc_set_ioctl(dhd_pub_t *dhd, int ifidx, uint cmd, void *buf, uint len)
 		memcpy(prot->buf, buf, len);
 
     if (cmd == WLC_SET_VAR) {
-        DHD_CTL(("%s: WLC_SET_VAR='%s'\n", __FUNCTION__, buf));
+        DHD_CTL(("%s: WLC_SET_VAR='%s'\n", __FUNCTION__, (char *) buf));
     }
 
 	if ((ret = dhdcdc_msg(dhd)) < 0)

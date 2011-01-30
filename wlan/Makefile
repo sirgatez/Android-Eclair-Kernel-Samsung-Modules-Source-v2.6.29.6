@@ -19,7 +19,7 @@ EXTRA_CFLAGS += -I$(src)/src/wl/sys/
 EXTRA_CFLAGS += -I$(src)/src/shared/
 
 EXTRA_CFLAGS += -I$(LINUXDIR)/include -I$(shell pwd) -I$(LINUXDIR)/arch/powerpc/boot
-#KBUILD_CFLAGS += -I$(LINUXDIR)/include -I$(shell pwd) -I$(LINUXDIR)/arch/powerpc/boot dkdkdjfskjflasdkjf
+#KBUILD_CFLAGS += -I$(LINUXDIR)/include -I$(shell pwd) -I$(LINUXDIR)/arch/powerpc/boot
 
 
 #obj-$(CONFIG_BROADCOM_WIFI)-m	+= bcm4325.o

@@ -24,7 +24,7 @@ static int VIBETONZ_DEBUG_LEVEL = 3;	// Debug Level
 *****************************************************************************/
 
 #define ERROR_SUCCESS				0
-#define TRUE					1
+#define TRUE						1
 
 // device node
 #define VIBETONZ_DEV_NAME 			"vibrator"

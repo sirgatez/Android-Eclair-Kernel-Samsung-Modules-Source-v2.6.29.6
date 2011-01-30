@@ -132,9 +132,9 @@ static void vibetonz_start(void)
 	gpio_direction_output(VIBETONZ_EN,0);
 	mdelay(10);
 	s3c_gpio_setpull(VIBETONZ_EN, S3C_GPIO_PULL_NONE);
-    	gpio_set_value(VIBETONZ_EN, GPIO_LEVEL_HIGH);
+    gpio_set_value(VIBETONZ_EN, GPIO_LEVEL_HIGH);
 
-    	vib_pwm = pwm_request(VIBETONZ_PWM, "vibtonz");
+    vib_pwm = pwm_request(VIBETONZ_PWM, "vibtonz");
 	
 	/* timed_output_device settings */
 	ret = timed_output_dev_register(&timed_output_vt);
