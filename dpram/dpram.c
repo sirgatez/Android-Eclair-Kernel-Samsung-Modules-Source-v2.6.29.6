@@ -851,11 +851,13 @@ void request_phone_reset(void)
 
 static int onedram_get_semaphore(const char *func)
 {
-	int i, chk_try = 5000;
-	int j, req_try = 10;
+	int i, chk_try = 10;
+	int j, req_try = 5000;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
-	
+	*onedram_mailboxBA = cmd;
+	mdelay(1);
+
 	if(dump_on) return -1;
 
 	for(j = 0; j < req_try; j++) {
@@ -867,11 +869,13 @@ static int onedram_get_semaphore(const char *func)
 			}
 			udelay(1);
 		}
+		mdelay(1);
 		*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ FAILED Attempts: %d ]\n",__func__, cmd, i);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
@@ -889,11 +893,13 @@ static int onedram_get_semaphore(const char *func)
 
 static int onedram_get_semaphore_for_init(const char *func)
 {
-	int i, chk_try = 5000;
-	int j, req_try = 10;
+	int i, chk_try = 10;
+	int j, req_try = 5000;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
-	
+	*onedram_mailboxBA = cmd;
+	mdelay(1);
+
 	if(dump_on) return -1;
 
 	for(j = 0; j < req_try; j++) {
@@ -905,11 +911,13 @@ static int onedram_get_semaphore_for_init(const char *func)
 			}
 			udelay(1);
 		}
+		mdelay(1);
 		*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ FAILED Attempts: %d ]\n",__func__, cmd, i);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
