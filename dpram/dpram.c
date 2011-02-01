@@ -150,6 +150,8 @@ struct pdp_info {
 };
 
 
+unsigned int DPRAM_COMM_WAIT_INIT = 5 * 1000;
+unsigned int DPRAM_COMM_WAIT_POST = 300;
 
 static struct pdp_info *pdp_table[MAX_PDP_CONTEXT];
 static DEFINE_MUTEX(pdp_lock);
@@ -857,7 +859,7 @@ static int onedram_get_semaphore(const char *func)
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
-	mdelay(4);
+	udelay(DPRAM_COMM_WAIT_INIT);
 
 	if(dump_on) return -1;
 
@@ -865,17 +867,17 @@ static int onedram_get_semaphore(const char *func)
 		if(*onedram_sem) {
 			unreceived_semaphore = 0;
 			if (j > 0) {
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x 500ns ]\n",__func__, cmd, (j));
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
 			}
 			return 1;
 		}
-		udelay(250);
+		udelay(DPRAM_COMM_WAIT_POST);
 		*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
-	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x 500ns ]\n",__func__, cmd, (j));
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
@@ -901,7 +903,7 @@ static int onedram_get_semaphore_for_init(const char *func)
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
-	mdelay(4);
+	udelay(DPRAM_COMM_WAIT_INIT);
 
 	if(dump_on) return -1;
 
@@ -909,17 +911,17 @@ static int onedram_get_semaphore_for_init(const char *func)
 		if(*onedram_sem) {
 			unreceived_semaphore = 0;
 			if (j > 0) {
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x 500ns ]\n",__func__, cmd, (j));
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
 			}
 			return 1;
 		}
-		udelay(250);
+		udelay(DPRAM_COMM_WAIT_POST);
 		*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
-	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d x 500ns ]\n",__func__, cmd, (j));
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
