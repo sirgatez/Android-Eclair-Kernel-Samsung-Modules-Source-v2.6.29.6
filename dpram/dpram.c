@@ -149,9 +149,16 @@ struct pdp_info {
 #define vs_dev		dev_u.vs_u
 };
 
+/* ICPR Test Results
+  I/C/P/R =  500/100/ 50/10000 =  65DL / 90UL
+  I/C/P/R =  500/100/  0/10000 =  43DL / 81UL
+  I/C/P/R =  250/100/  0/10000 =  43DL / 81UL
+*/
 
-unsigned int DPRAM_COMM_WAIT_INIT = 5 * 1000;
-unsigned int DPRAM_COMM_WAIT_POST = 300;
+unsigned int DPRAM_COMM_WAIT_INIT	= 250;
+unsigned int DPRAM_COMM_WAIT_CHECK	= 100;
+unsigned int DPRAM_COMM_WAIT_POST	= 0;
+unsigned int DPRAM_COMM_RETRIES		= 20 * 1000;
 
 static struct pdp_info *pdp_table[MAX_PDP_CONTEXT];
 static DEFINE_MUTEX(pdp_lock);
@@ -204,11 +211,15 @@ static int onedram_get_semaphore_for_init(const char *func);
 	#define DPRAM_ERR_DEVICE			"dpramerr"
 #endif	/* _ENABLE_ERROR_DEVICE */
 
+#define ONEDRAM_SEM_UNLOCKED 0
+#define ONEDRAM_SEM_LOCKED 1
+
 static int onedram_get_semaphore(const char*);
 static int return_onedram_semaphore(const char*);
 static void send_interrupt_to_phone_with_semaphore(u16 irq_mask);
 
 static void __iomem *dpram_base = 0;
+static unsigned int onedram_semlock = ONEDRAM_SEM_UNLOCKED;
 static unsigned int *onedram_sem;
 static unsigned int *onedram_mailboxBA;		//send mail
 static unsigned int *onedram_mailboxAB;		//received mail
@@ -299,6 +310,33 @@ static DECLARE_TASKLET(semaphore_control_tasklet, semaphore_control_handler, 0);
 	extern void usb_switch_mode(int);
 #endif	/* _ENABLE_ERROR_DEVICE */
 
+/* ONEDRAM Semaphore Checks / Sets */
+unsigned int onedram_semaphore_check(void) {
+	if(*onedram_sem) {
+		printk(KERN_ERR "[OneDRAM] semaphore is true: %d\n", *onedram_sem);
+		return 1;
+	} else {
+		printk(KERN_ERR "[OneDRAM] semaphore is false: %d\n", *onedram_sem);
+		return 0;
+	}
+}	
+
+unsigned int onedram_semaphore_set(unsigned int semaphore_code) {
+
+	printk(KERN_ERR "[OneDRAM] pre-change old semaphore is: %d\n", *onedram_sem);
+
+	*onedram_sem = semaphore_code;
+
+	if(*onedram_sem == semaphore_code) {
+		printk(KERN_ERR "[OneDRAM] semaphore is changed to: %d\n", *onedram_sem);
+		return 1;
+	} else {
+		printk(KERN_ERR "[OneDRAM] failed to change semaphore semaphore: %d\n", *onedram_sem);
+		return 0;
+	}
+}
+
+
 // 2008.10.20.
 //static DECLARE_MUTEX(write_mutex);
 
@@ -350,6 +388,7 @@ static inline void _memcpy(void *p_dest, const void *p_src, int size)
 		printk(KERN_ERR "[OneDRAM] memory access without semaphore!: %d\n", *onedram_sem);
 		return;
 	}
+
 	if (size <= 0) {
 		return;
 	}
@@ -580,8 +619,9 @@ static int dpram_read_fmt(dpram_device_t *device, const u16 non_cmd)
 	int size = 0;
 	u16 head, tail;
 
-	if(!*onedram_sem)
+	if(!*onedram_sem) {
 		printk(KERN_ERR "!!!!! %s no sem\n", __func__);
+	}
 
 	if(onedram_lock_with_semaphore(__func__) < 0)
 		return -EINTR;
@@ -675,8 +715,9 @@ static int dpram_read_raw(dpram_device_t *device, const u16 non_cmd)
 #if 0
 	int i;
 #endif
-	if(!*onedram_sem)
+	if(!*onedram_sem) {
 		printk(KERN_ERR "!!!!! %s no sem\n", __func__);
+	}
 
 	if(onedram_lock_with_semaphore(__func__) < 0)
 		return -EINTR;
@@ -855,7 +896,7 @@ void request_phone_reset(void)
 
 static int onedram_get_semaphore(const char *func)
 {
-	int j, req_try = 10000;
+	int j;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
@@ -863,21 +904,23 @@ static int onedram_get_semaphore(const char *func)
 
 	if(dump_on) return -1;
 
-	for(j = 0; j < req_try; j++) {
+	for(j = 0; j < DPRAM_COMM_RETRIES; j++) {
 		if(*onedram_sem) {
 			unreceived_semaphore = 0;
 			if (j > 0) {
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
 			}
+			//*onedram_mailboxBA = cmd;
+			udelay(DPRAM_COMM_WAIT_POST);
 			return 1;
 		}
-		udelay(DPRAM_COMM_WAIT_POST);
-		*onedram_mailboxBA = cmd;
+		udelay(DPRAM_COMM_WAIT_CHECK);
+		//*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
-	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
@@ -899,7 +942,7 @@ static int onedram_get_semaphore(const char *func)
 
 static int onedram_get_semaphore_for_init(const char *func)
 {
-	int j, req_try = 10000;
+	int j;
 
 	const u16 cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 	*onedram_mailboxBA = cmd;
@@ -907,21 +950,23 @@ static int onedram_get_semaphore_for_init(const char *func)
 
 	if(dump_on) return -1;
 
-	for(j = 0; j < req_try; j++) {
+	for(j = 0; j < DPRAM_COMM_RETRIES; j++) {
 		if(*onedram_sem) {
 			unreceived_semaphore = 0;
 			if (j > 0) {
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
+				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
 			}
+			//*onedram_mailboxBA = cmd;
+			udelay(DPRAM_COMM_WAIT_POST);
 			return 1;
 		}
-		udelay(DPRAM_COMM_WAIT_POST);
-		*onedram_mailboxBA = cmd;
+		udelay(DPRAM_COMM_WAIT_CHECK);
+		//*onedram_mailboxBA = cmd;
 		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 	}
 
 	unreceived_semaphore++;
-	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %d inital + %d x %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_POST);
+	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
@@ -946,14 +991,14 @@ static void send_interrupt_to_phone_with_semaphore(u16 irq_mask)
 
 	if(!atomic_read(&onedram_lock)) 
 	{
-		if(*onedram_sem) { 	
+		if(*onedram_sem) {
 			*onedram_sem = 0x0;
 			*onedram_mailboxBA = irq_mask;
-#ifdef PRINT_SEND_IRQ
-			printk(KERN_ERR "=====> send IRQ: %x with sem\n", irq_mask);
-#endif
+			#ifdef PRINT_SEND_IRQ
+				printk(KERN_ERR "=====> send IRQ: %x with sem\n", irq_mask);
+			#endif
 			requested_semaphore = 0;
-		}else {
+		} else {
 			*onedram_mailboxBA = irq_mask;
 #ifdef PRINT_SEND_IRQ
 			printk(KERN_ERR "=====> send IRQ: %x\n", irq_mask);
@@ -992,11 +1037,14 @@ static int onedram_lock_with_semaphore(const char* func)
 	
 	if(lock_value != 1)
 		printk(KERN_ERR "[OneDRAM] (%s, lock) lock_value: %d\n", func, lock_value);
+//SG CHECK
+	if(!(*onedram_sem)) {
+		onedram_get_semaphore(__func__);
+	}
 
 	if(*onedram_sem) {
 		return 0;	
-	}
-	else{
+	} else{
 		printk(KERN_ERR "[OneDRAM] (%s, lock) failed.. no sem\n", func);
 		if((lock_value = atomic_dec_return(&onedram_lock)) < 0)
 			printk(KERN_ERR "[OneDRAM] (%s, lock) fail to unlocking onedram access. %d\n", func, lock_value);
@@ -1036,7 +1084,7 @@ static int dpram_shared_bank_remap(void)
 		printk(KERN_ERR "failed ioremap\n");
 		return -ENOENT;
 		}
-		
+
 	onedram_sem = DPRAM_VBASE + DPRAM_SMP; 
 	onedram_mailboxBA = DPRAM_VBASE + DPRAM_MBX_BA;
 	onedram_mailboxAB = DPRAM_VBASE + DPRAM_MBX_AB;
@@ -1117,7 +1165,11 @@ static int dpram_init_and_report(void)
 static inline int dpram_get_read_available(dpram_device_t *device)
 {
 	u16 head, tail;
-	
+
+	if(!(*onedram_sem)) {
+		onedram_get_semaphore(__func__);
+	}
+
 	if(*onedram_sem) {
 
 		READ_FROM_DPRAM_VERIFY(&head, device->in_head_addr, sizeof(head));
@@ -1127,7 +1179,7 @@ static inline int dpram_get_read_available(dpram_device_t *device)
 		return head - tail;
 	}
 	else {
-//	 	printk(KERN_ERR "[OneDRAM] (%s) semaphore: %d\n", __func__, *onedram_sem);
+	 	printk(KERN_ERR "[OneDRAM] (%s) semaphore: %d\n", __func__, *onedram_sem);
 		return 0;
 	}
 }
@@ -1139,10 +1191,8 @@ static void dpram_drop_data(dpram_device_t *device)
 	if(*onedram_sem) {
 		READ_FROM_DPRAM_VERIFY(&head, device->in_head_addr, sizeof(head));
 		WRITE_TO_DPRAM_VERIFY(device->in_tail_addr, &head, sizeof(head));
-		
 		READ_FROM_DPRAM_VERIFY(&tail, device->in_tail_addr, sizeof(tail));
 		printk(KERN_ERR "[OneDram] %s, head: %d, tail: %d\n", __func__, head, tail);
-
 	}
 }
 
@@ -1785,7 +1835,7 @@ static void cmd_error_display_handler(void)
     else {
         buf[0] = '1';
         buf[1] = ' ';
-        
+
 		if(*onedram_sem == 0x1) {
 			READ_FROM_DPRAM((buf + 2), DPRAM_PHONE2PDA_FORMATTED_BUFFER_ADDRESS, 
                 sizeof (buf) - 3);
@@ -1925,9 +1975,12 @@ static void non_command_handler(u16 non_cmd)
 
 	/* @LDK@ formatted check. */
 
+	if(!(*onedram_sem)) {
+		onedram_get_semaphore(__func__);
+	}
 
 	if(!(*onedram_sem)) {
-//		printk(KERN_ERR "[OneDRAM] %s failed! no sem. cmd: %x\n", __func__, non_cmd);
+		printk(KERN_ERR "[OneDRAM] %s failed! no sem. cmd: %x\n", __func__, non_cmd);
 		return;
 	}
 
