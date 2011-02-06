@@ -93,7 +93,7 @@ typedef struct pdp_arg {
 #define MAX_PDP_CONTEXT			10
 
 /* Maximum PDP data length */
-#define MAX_PDP_DATA_LEN		1550	
+#define MAX_PDP_DATA_LEN		1550
 
 /* Maximum PDP packet length including header and start/stop bytes */
 #define MAX_PDP_PACKET_LEN		(MAX_PDP_DATA_LEN + 6 + 2)
