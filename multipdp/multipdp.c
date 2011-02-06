@@ -93,7 +93,7 @@ typedef struct pdp_arg {
 #define MAX_PDP_CONTEXT			10
 
 /* Maximum PDP data length */
-#define MAX_PDP_DATA_LEN		1550
+#define MAX_PDP_DATA_LEN		1500
 
 /* Maximum PDP packet length including header and start/stop bytes */
 #define MAX_PDP_PACKET_LEN		(MAX_PDP_DATA_LEN + 6 + 2)
@@ -368,6 +368,7 @@ static inline struct file *dpram_open(void)
 	filp = filp_open(DPRAM_DEVNAME, O_RDWR|O_NONBLOCK, 0);
 	if (IS_ERR(filp)) {
 		DPRINTK(1, "filp_open() failed~!: %ld\n", PTR_ERR(filp));
+		printk(KERN_ERR "(%s) filp_open() failed~!: %ld\n",__func__, PTR_ERR(filp));
 		return NULL;
 	}
 
@@ -378,6 +379,7 @@ static inline struct file *dpram_open(void)
 	set_fs(oldfs);
 	if (ret < 0) {
 		DPRINTK(1, "f_op->ioctl() failed: %d\n", ret);
+		printk(KERN_ERR "(%s) f_op->ioctl() failed: %d\n",__func__, ret);
 		filp_close(filp, current->files);
 		return NULL;
 	}
@@ -398,12 +400,15 @@ static inline struct file *dpram_open(void)
 		filp_close(filp, current->files);
 		return NULL;
 	}
+	printk(KERN_ERR "MULTIPDP (%s) DPRAM device opened\n",__func__);
 	return filp;
 }
 
 static inline void dpram_close(struct file *filp)
 {
 	filp_close(filp, current->files);
+	printk(KERN_ERR "MULTIPDP (%s) DPRAM device closed\n",__func__);
+
 }
 
 static inline int dpram_poll(struct file *filp)
@@ -607,6 +612,7 @@ static int dpram_thread(void *data)
 
 		if (ret == -ERESTARTSYS) {
 			if (sigismember(&current->pending.signal, SIGUSR1)) {
+				printk(KERN_ERR "MULTIPDP (%s) DPRAM device communication interrupted\n",__func__);
 				sigdelset(&current->pending.signal, SIGUSR1);
 				recalc_sigpending();
 				ret = 0;
@@ -659,6 +665,8 @@ static int vnet_open(struct net_device *net)
 	}
 	INIT_WORK(&dev->vn_dev.xmit_task, NULL);
 	netif_start_queue(net);
+
+	printk(KERN_ERR "MULTIPDP (%s) Virtual network device opened\n",__func__);
 
 	return 0;
 }
@@ -954,24 +962,26 @@ static int vs_open(struct tty_struct *tty, struct file *filp)
 	tty->driver_data = (void *)dev;
 	tty->low_latency = 1;
 	dev->vs_dev.tty = tty;
+	printk("========================>  vs_open : %s\n", tty->driver->name); 
+	printk(KERN_ERR "MULTIPDP (%s) Virtual serial device opened\n",__func__);
 
-printk("========================>  vs_open : %s\n", tty->driver->name); 
 	return 0;
 }
 
-static int vs_close(struct tty_struct *tty, struct file *filp)
+static void vs_close(struct tty_struct *tty, struct file *filp)
 {
 	
 	struct pdp_info *dev;
 	dev = pdp_get_serdev(tty->driver->name); // 2.6 kernel porting
 
 	if (dev == NULL) {
-		return -ENODEV;
+		return; // -ENODEV;
 	}
 	dev->vs_dev.tty = NULL;
 
-printk("========================>  vs_close : %s\n", tty->driver->name); 
-	return 0;
+	printk("========================>  vs_close : %s\n", tty->driver->name); 
+	printk(KERN_ERR "MULTIPDP (%s) Virtual serial device closed\n",__func__);
+	return; // 0;
 }
 
 
@@ -1007,7 +1017,7 @@ static int vs_chars_in_buffer(struct tty_struct *tty)
 
 static inline int multipdp_tty_insert_data(struct tty_struct *tty, const u8 *psrc, u16 size)
 {
-#define CLUSTER_SEGMENT 1550
+#define CLUSTER_SEGMENT MAX_PDP_DATA_LEN
 	u16 copied_size = 0;
 	int retval = 0;
 	// ... ..... multipdp. .... raw data. ....
@@ -1196,9 +1206,11 @@ static int vs_ioctl(struct tty_struct *tty, struct file *file,
 	return -ENOIOCTLCMD;
 }
 
+/* Not Used *
 static void vs_break_ctl(struct tty_struct *tty, int break_state)
 {
 }
+*/
 
 static struct tty_operations multipdp_tty_ops = {
 	.open 		= vs_open,
@@ -1391,12 +1403,13 @@ static inline struct pdp_info * pdp_remove_slot(int slot)
 }
 
 #ifdef	NO_TTY_DPRAM
+//
 extern int multipdp_write( char *, int) ;
 #endif
 
 static int pdp_mux(struct pdp_info *dev, const void *data, size_t len   )
 {
-	int ret;
+	int ret; // = 0;
 	size_t nbytes;
 	u8 *tx_buf;
 	struct pdp_hdr *hdr;
@@ -1427,12 +1440,16 @@ static int pdp_mux(struct pdp_info *dev, const void *data, size_t len   )
 
 		wake_lock_timeout(&pdp_wake_lock, 6*HZ);
 #ifdef	NO_TTY_DPRAM
-		ret = multipdp_write(tx_buf, hdr->len +2);
-		if( ret <= 0 )
-			printk("pdp_mux:multipdp_write : len = %d\n", hdr->len+2);
+		//
+ret = multipdp_write(tx_buf, hdr->len +2);
+		//
+if( ret <= 0 )
+		//
+	printk("pdp_mux:multipdp_write : len = %d\n", hdr->len+2);
 #endif
 		if (ret < 0) {
 			DPRINTK(1, "dpram_write() failed: %d\n", ret);
+			printk(KERN_ERR "(%s) dpram_write() failed: %d\n",__func__, ret);
 			return ret;
 		}
 		buf += nbytes;
@@ -1442,7 +1459,9 @@ static int pdp_mux(struct pdp_info *dev, const void *data, size_t len   )
 	return 0;
 }
 #ifdef	NO_TTY_DPRAM
+//
 extern int multipdp_dump(void);
+//
 extern void yhexdump(const char *buf, int len);
 //0x7F, pdp_hdr
 static int multipdp_demux(char *buf, int size)
@@ -1467,13 +1486,16 @@ static int multipdp_demux(char *buf, int size)
 
 	if (dev == NULL) {
 		printk("========================================= : (1)\n");
-		yhexdump((char*)&hdr, sizeof(struct pdp_hdr));		
+		//
+yhexdump((char*)&hdr, sizeof(struct pdp_hdr));		
 		printk("========================================= : (2)\n");
-		yhexdump((char*)buf, size);	
+		//
+yhexdump((char*)buf, size);	
 		printk("========================================= : (3)\n");
 		EPRINTK("invalid id: %u, there is no existing device.\n", hdr.id);
 
-		multipdp_dump();
+		//
+multipdp_dump();
 		ret = -ENODEV;
 		goto err;
 	}
@@ -1494,7 +1516,8 @@ static int multipdp_demux(char *buf, int size)
 			if( len > 1500 )
 			{	
 				printk("-------------> len is [%d]\n", len);
-				multipdp_dump();
+				//
+multipdp_dump();
 			}
 			//printk("multipdp_demux:vnet_recv(VNET) (1): len = %d\n", len);
 			ret = multipdp_vnet_recv(dev, (char *)&buf[sizeof(struct pdp_hdr)],  len);
@@ -1505,7 +1528,8 @@ static int multipdp_demux(char *buf, int size)
 			break;
 		default:
 			printk("-------------> type invalid [%d]\n", dev->type);
-			multipdp_dump();
+			//
+multipdp_dump();
 			ret = -1;
 	}
 
@@ -1900,6 +1924,7 @@ static int multipdp_proc_read(char *page, char **start, off_t off,
 #endif
 
 #ifdef	NO_TTY_DPRAM
+//
 extern void multipdp_rx_noti_regi( int (*rx_func)(char *, int) );
 #endif
 /*
@@ -1996,6 +2021,7 @@ static int __init multipdp_init(void)
 #endif
 
 #ifdef	NO_TTY_DPRAM
+	//
 	printk("multipdp_init:multipdp_rx_noti_regi calling");
 	multipdp_rx_noti_regi(multipdp_rx_cback );	
 #endif

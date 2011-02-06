@@ -177,6 +177,8 @@ unsigned int DPRAM_COMM_RETRIES			= 50 * 1000;
 unsigned int DPRAM_COMM_RETRIES_REREQ	= 20 * 1000;
 unsigned int DPRAM_COMM_RETRIES_ERRPRNT	= 100;
 
+unsigned int DPRAM_SCHEDULED_WORK_DELAY = 300;
+
 static struct pdp_info *pdp_table[MAX_PDP_CONTEXT];
 static DEFINE_MUTEX(pdp_lock);
 
@@ -496,16 +498,16 @@ static int dpram_write(dpram_device_t *device,
 	//unsigned long flags;
 
 //	down_interruptible(&write_mutex);	
-#ifdef PRINT_WRITE
-	int i;
-	printk(KERN_ERR "WRITE\n");
-	for (i = 0; i < len; i++)	
-		printk(KERN_ERR "%02x ", *((unsigned char *)buf + i));
-	printk(KERN_ERR "\n");
-#endif
-#ifdef PRINT_WRITE_SHORT
-		printk(KERN_ERR "WRITE: len: %d\n", len);
-#endif
+	#ifdef PRINT_WRITE
+		int i;
+		printk(KERN_ERR "WRITE\n");
+		for (i = 0; i < len; i++)	
+			printk(KERN_ERR "%02x ", *((unsigned char *)buf + i));
+		printk(KERN_ERR "\n");
+	#endif
+	#ifdef PRINT_WRITE_SHORT
+			printk(KERN_ERR "WRITE: len: %d\n", len);
+	#endif
 
 	if(!onedram_get_semaphore(__func__)) {
 		return -EINTR;
@@ -1464,7 +1466,7 @@ static int dpram_tty_open(struct tty_struct *tty, struct file *file)
 	}
 
 	tty->driver_data = (void *)device;
-	tty->low_latency = 1;
+	tty->low_latency = 0;
 	return 0;
 }
 
@@ -2088,7 +2090,7 @@ static irqreturn_t phone_active_irq_handler(int irq, void *dev_id)
 	
 #ifdef DPRAM_USES_DELAYED_PHONE_ACTIVE_IRQ
 	if(gpio_get_value(GPIO_PHONE_ACTIVE) == 0) {
-		schedule_delayed_work(&phone_active_delayed_work, 100);
+		schedule_delayed_work(&phone_active_delayed_work, DPRAM_SCHEDULED_WORK_DELAY);
 	}
 #else
 
@@ -2102,7 +2104,7 @@ static irqreturn_t phone_active_irq_handler(int irq, void *dev_id)
 		// for ignoring the momentary drop..
 		mdelay(5);
 
-			if(gpio_get_value(GPIO_PHONE_ACTIVE)) {
+		if(gpio_get_value(GPIO_PHONE_ACTIVE)) {
 			printk(KERN_ERR "[ONEDRAM] Momentary Phone Active IRQ drop detected...Ignored count %d!\n", i);
 			return IRQ_HANDLED;
 		}
@@ -2309,10 +2311,10 @@ static int vs_open(struct tty_struct *tty, struct file *filp)
 	}
 
 	tty->driver_data = (void *)dev;
-	tty->low_latency = 1;
+	tty->low_latency = 0;
 	dev->vs_dev.tty = tty;
 	dev->vs_dev.refcount++;
-	printk(KERN_ERR "[%s] %s, refcount: %d \n", __func__, tty->driver->name, dev->vs_dev.refcount);
+	printk(KERN_ERR "[%s] DPRAM %s, refcount: %d \n", __func__, tty->driver->name, dev->vs_dev.refcount);
 
 	return 0;
 }
@@ -2326,7 +2328,7 @@ static void vs_close(struct tty_struct *tty, struct file *filp)
 	if (!dev )
 		return;
 	dev->vs_dev.refcount--;
-	printk(KERN_ERR "[%s] %s, refcount: %d \n", __func__, tty->driver->name, dev->vs_dev.refcount);
+	printk(KERN_ERR "[%s] DPRAM %s, refcount: %d \n", __func__, tty->driver->name, dev->vs_dev.refcount);
 
 	// TODO..
 
@@ -2839,7 +2841,7 @@ static struct platform_driver platform_dpram_driver = {
 	.resume 	= dpram_resume,
 	.shutdown	= dpram_shutdown,
 	.driver	= {
-		.name	= "dpram-device",
+		.name	= (const char*) "dpram-device"
 	},
 };
 
