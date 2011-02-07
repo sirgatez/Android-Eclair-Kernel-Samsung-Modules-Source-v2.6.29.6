@@ -101,7 +101,7 @@
 /* Device flags */
 #define DEV_FLAG_STICKY			0x1 /* Sticky */
 /* Maximum PDP packet length including header and start/stop bytes */
-#define MAX_PDP_PACKET_LEN		(MAX_PDP_DATA_LEN + 4 + 2)
+#define MAX_PDP_PACKET_LEN		(MAX_PDP_DATA_LEN + 6 + 2)
 
 
 /* Multiple PDP */
@@ -154,11 +154,13 @@ struct pdp_info {
 	I/C/P =  300/150/100 =  117DL / 54UL Mostly Stable
 	I/C/P =  300/150/ 75 =  114DL / 70UL Mostly Stable
 
+	Timing is in useconds.
+
 	I: Setting to less than 250 will result in instability.
 	C: Time to wait (again) before checking that onedram_sem is ready.
 	P: Can be helpful is adding a short delay before returning.
 	R: May need up to 20,000 attempts during high lag at bootup.
-	RR: If a semaphore is not obtained by this count, re-request it.
+	RR: If a semaphore is not obtained by this # of iterations, re-request it again.
 	RE: If this many retries pass, print attempts on success.
 
 	Periods of high lag such as bootup can cause excessive wait times,
@@ -176,6 +178,7 @@ unsigned int DPRAM_COMM_WAIT_POST		= 75;
 unsigned int DPRAM_COMM_RETRIES			= 50 * 1000;
 unsigned int DPRAM_COMM_RETRIES_REREQ	= 20 * 1000;
 unsigned int DPRAM_COMM_RETRIES_ERRPRNT	= 100;
+//#define DPRAM_COMM_MESSAGES
 
 unsigned int DPRAM_SCHEDULED_WORK_DELAY = 300;
 
@@ -509,10 +512,6 @@ static int dpram_write(dpram_device_t *device,
 			printk(KERN_ERR "WRITE: len: %d\n", len);
 	#endif
 
-	if(!onedram_get_semaphore(__func__)) {
-		return -EINTR;
-	}
-		
 	if(onedram_lock_with_semaphore(__func__) < 0) {
 		return -EINTR;
 	}
@@ -586,7 +585,7 @@ static int dpram_write(dpram_device_t *device,
 
 static inline int dpram_tty_insert_data(dpram_device_t *device, const u8 *psrc, u16 size)
 {
-#define CLUSTER_SEGMENT	1500
+#define CLUSTER_SEGMENT	MAX_PDP_DATA_LEN
 
 	u16 copied_size = 0;
 	int retval = 0;
@@ -913,19 +912,23 @@ static int onedram_get_semaphore(const char *func)
 	for(j = 0; j < DPRAM_COMM_RETRIES; j++) {
 		if(*onedram_sem) {
 			unreceived_semaphore = 0;
-			if (j > DPRAM_COMM_RETRIES_ERRPRNT) {
-				/* Only print retries if we exceed the above limit to indicated a problem */
-				printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
-			}
+			#if defined(DPRAM_COMM_MESSAGES)
+				if (j > DPRAM_COMM_RETRIES_ERRPRNT) {
+					/* Only print retries if we exceed the above limit to indicated a problem */
+					printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dusec + ( %d x %dusec ) + %dusec ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
+				}
+			#endif
 			udelay(DPRAM_COMM_WAIT_POST);
 			return 1;
 		}
 		udelay(DPRAM_COMM_WAIT_CHECK);
-		//printk(KERN_ERR "(%s)=====> send IRQ: %x\n",__func__, cmd);
 		if (j == DPRAM_COMM_RETRIES_REREQ) {
+			#if defined(DPRAM_COMM_MESSAGES)
+				printk(KERN_ERR "( %s )=====> Rerequesting send IRQ: %x [ Delays: %dusec + ( %d x %dusec ) + %dusec ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
+			#endif
 			*onedram_sem = 0x0;
+			unreceived_semaphore = 0;
 			requested_semaphore = 0;
-			cmd = 0;
 			cmd = INT_COMMAND(INT_MASK_CMD_SMP_REQ);
 			*onedram_mailboxBA = cmd;
 			udelay(DPRAM_COMM_WAIT_INIT);
@@ -933,7 +936,9 @@ static int onedram_get_semaphore(const char *func)
 	}
 
 	unreceived_semaphore++;
-	printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dns + ( %d x %dns ) + %dns ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
+	#if defined(DPRAM_COMM_MESSAGES)
+		printk(KERN_ERR "( %s )=====> send IRQ: %x [ Delays: %dusec + ( %d x %dusec ) + %dusec ]\n",__func__, cmd, DPRAM_COMM_WAIT_INIT,j,DPRAM_COMM_WAIT_CHECK,DPRAM_COMM_WAIT_POST);
+	#endif
 	printk(KERN_ERR "[OneDRAM](%s) Failed to get a Semaphore. sem:%d, PHONE_ACTIVE:%s, fail_cnt:%d\n", 
 			func, *onedram_sem,	gpio_get_value(GPIO_PHONE_ACTIVE)?"HIGH":"LOW ", unreceived_semaphore);
 
@@ -1203,7 +1208,7 @@ static int dpram_extra_mem_rw(struct _param_em *param)
 		return -1;
 	}
 
-	if(!onedram_get_semaphore(__func__)) 
+	if (!(onedram_semaphore_check_create(__func__)))
 		return -EINTR;
 
 	if(onedram_lock_with_semaphore(__func__) < 0)
@@ -1244,7 +1249,7 @@ static int dpram_phone_ramdump_on(void)
 	
 	printk(KERN_ERR "[OneDRAM] Ramdump ON.\n");
 
-	if(!onedram_get_semaphore(__func__)) 
+	if (!(onedram_semaphore_check_create(__func__)))
 		return -EINTR;
 
 	if(onedram_lock_with_semaphore(__func__) < 0)
@@ -1292,7 +1297,7 @@ static int dpram_phone_ramdump_off(void)
 	
 	dump_on = 0;
 
-	if(!onedram_get_semaphore(__func__)) 
+	if (!(onedram_semaphore_check_create(__func__)))
 		return -EINTR;
 
 	if(onedram_lock_with_semaphore(__func__) < 0)
@@ -1538,7 +1543,7 @@ static int dpram_tty_ioctl(struct tty_struct *tty, struct file *file,
 #if 0
 			if (!(onedram_semaphore_check_create(__func__))) {
 				printk(KERN_ERR "[OneDRAM] (%s) semaphore: %d\n", __func__, *onedram_sem);
-				onedram_get_semaphore(__func__);
+				onedram_semaphore_check_create(__func__);
 			}
 #endif
 			return 0;
@@ -2714,7 +2719,7 @@ static void check_miss_interrupt(void)
 
 		if (!(onedram_semaphore_check_create(__func__))) {
 			printk(KERN_ERR "[OneDRAM] (%s) semaphore: %d\n", __func__, *onedram_sem);
-			onedram_get_semaphore(__func__);
+			onedram_semaphore_check_create(__func__);
 		}
 
 		local_irq_save(flags);
@@ -2740,12 +2745,9 @@ static int dpram_resume(struct platform_device *dev)
 	return 0;
 }
 
-static int dpram_shutdown(struct platform_device *dev)
+static void dpram_shutdown(struct platform_device *dev)
 {
-	int ret = 0;
 	printk("\ndpram_shutdown !!!!!!!!!!!!!!!!!!!!!\n");
-	//ret = del_timer(&request_semaphore_timer);
-	printk("\ndpram_shutdown ret : %d\n", ret);
 
 	unregister_dpram_driver();
 #ifdef _ENABLE_ERROR_DEVICE
@@ -2755,7 +2757,7 @@ static int dpram_shutdown(struct platform_device *dev)
 	free_irq(IRQ_PHONE_ACTIVE, NULL);
 
 	kill_tasklets();
-	return 0;
+	return;
 }
 
 static int __devinit dpram_probe(struct platform_device *dev)

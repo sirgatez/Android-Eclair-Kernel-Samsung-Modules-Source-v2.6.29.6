@@ -229,7 +229,7 @@ static ssize_t store_loopback_value(struct device *dev, struct device_attribute 
 	int i;
 
 	// we can send various size of data by setting this value as mutiple of 10
-	int data_size = 1500;
+	int data_size = MAX_PDP_DATA_LEN;
 	
 	char temp_str[10] = "0123456789";
 	if ( !strncmp(buf, "start", 5))
@@ -1046,7 +1046,7 @@ static int multipdp_vs_read(struct pdp_info *dev, char *buf, size_t len)
 	}
 
 #ifndef	NO_TTY_RX_BUFF
-	if(len > 1500) {
+	if(len > MAX_PDP_DATA_LEN) {
 #else
 	if(len > MAX_RX_BUFF_LEN) {
 #endif
@@ -1135,7 +1135,7 @@ static int vs_read(struct pdp_info *dev, size_t len)
 		return 0;
 	}
 
-	if(len > 1500) {
+	if(len > MAX_PDP_DATA_LEN) {
 		unsigned char *prx_buf = kzalloc(len, GFP_ATOMIC);
 
 		if(prx_buf == NULL)
@@ -1513,7 +1513,7 @@ multipdp_dump();
 	/* read data */
 	switch (dev->type) {
 		case DEV_TYPE_NET:
-			if( len > 1500 )
+			if( len > MAX_PDP_DATA_LEN )
 			{	
 				printk("-------------> len is [%d]\n", len);
 				//
