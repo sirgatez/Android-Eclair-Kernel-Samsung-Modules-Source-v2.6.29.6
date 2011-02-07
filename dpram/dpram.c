@@ -306,6 +306,9 @@ static void res_ack_tasklet_handler(unsigned long data);
 static void fmt_rcv_tasklet_handler(unsigned long data);
 static void raw_rcv_tasklet_handler(unsigned long data);
 
+static void command_handler(u16 non_cmd);
+static void non_command_handler(u16 non_cmd);
+
 static DECLARE_TASKLET(fmt_send_tasklet, fmt_rcv_tasklet_handler, 0);
 static DECLARE_TASKLET(raw_send_tasklet, raw_rcv_tasklet_handler, 0);
 static DECLARE_TASKLET(fmt_res_ack_tasklet, res_ack_tasklet_handler,
@@ -1923,20 +1926,23 @@ static void command_handler(u16 cmd)
 		case INT_MASK_CMD_SMP_REP:
 			cmd_smp_rep_handler();
 			break;
+
 		case 0xff3f:
 			//Unknown command that randomly appears
 			//No known damage occurs here
 			dprintk(KERN_ERR "Unknown command.. %x ...attempting to drop\n", cmd);
-			non_command_handler(irq_mask);
+			non_command_handler(cmd);
 			break;
+
 		case 0xf:
 			//Unknown command that randomly appears
 			dprintk(KERN_ERR "Unknown command.. %x BAD THINGS HAPPEN...attempting to drop\n", cmd);
-			non_command_handler(irq_mask);
+			non_command_handler(cmd);
 			break;
+
 		default:
 			dprintk(KERN_ERR "Unknown command.. %x ...attempting to drop\n", cmd);
-			non_command_handler(irq_mask);
+			non_command_handler(cmd);
 			break;
 	}
 }
