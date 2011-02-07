@@ -1925,10 +1925,19 @@ static void command_handler(u16 cmd)
 			break;
 		case 0xff3f:
 			//Unknown command that randomly appears
+			//No known damage occurs here
+			dprintk(KERN_ERR "Unknown command.. %x ...attempting to drop\n", cmd);
+			non_command_handler(irq_mask);
 			break;
-
+		case 0xf:
+			//Unknown command that randomly appears
+			dprintk(KERN_ERR "Unknown command.. %x BAD THINGS HAPPEN...attempting to drop\n", cmd);
+			non_command_handler(irq_mask);
+			break;
 		default:
-			dprintk(KERN_ERR "Unknown command.. %x\n", cmd);
+			dprintk(KERN_ERR "Unknown command.. %x ...attempting to drop\n", cmd);
+			non_command_handler(irq_mask);
+			break;
 	}
 }
 
