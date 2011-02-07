@@ -1929,7 +1929,7 @@ static void command_handler(u16 cmd)
 
 		case 0xff3f:
 			//Unknown command that randomly appears
-			//No known damage occurs here
+			//No known damage occurs here..attempt to track dpram inits to drop after init later
 			dprintk(KERN_ERR "Unknown command.. %x ...do not drop during startup, will prevent bootup\n", cmd);
 			//non_command_handler(cmd);
 			break;
